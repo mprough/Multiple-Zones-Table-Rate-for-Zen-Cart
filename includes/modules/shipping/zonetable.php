@@ -1,46 +1,66 @@
 <?php
 /**
  * @package shippingMethod
- * @copyright Copyright 2003-2024 Zen Cart Development Team
+ * @copyright Copyright 2003-2026 Zen Cart Development Team
  * @copyright Portions Copyright 2003 osCommerce
- * @license http://www.zen-cart.com/license/2_0.txt GNU Public License V2.0
- * @version $Id: zonetable.php v2.02 08/15/2024 PRO-Webs.net $
+ * @copyright Modifications Copyright 2024-2026 PRO-Webs.net
+ * @license https://www.gnu.org/licenses/old-licenses/gpl-2.0.html GNU GPL v2.0
+ * @version 2.1.0
  */
 
-class zonetable extends base {
+class zonetable extends base
+{
+    private const NUMBER_OF_ZONES = 10;
+
+    protected $_check;
     public string $code;
     public string $title;
     public string $description;
     public string $icon;
     public bool $enabled;
+    public $sort_order;
+    public $tax_class;
+    public $tax_basis;
+    public array $quotes = [];
     public int $num_zones;
-    public int $dest_zone;
+    public int $dest_zone = 0;
 
-    public function __construct() {
+    public function __construct()
+    {
         global $order, $db;
 
-        $geozones = $db->Execute("SELECT * FROM " . TABLE_GEO_ZONES);
-        $this->num_zones = $geozones->RecordCount();
+        $this->num_zones = self::NUMBER_OF_ZONES;
 
         $this->code = 'zonetable';
         $this->title = MODULE_SHIPPING_ZONETABLE_TEXT_TITLE;
         $this->description = MODULE_SHIPPING_ZONETABLE_TEXT_DESCRIPTION;
         $this->sort_order = defined('MODULE_SHIPPING_ZONETABLE_SORT_ORDER') ? MODULE_SHIPPING_ZONETABLE_SORT_ORDER : null;
-        if (null === $this->sort_order) return false;
+        if ($this->sort_order === null) {
+            return;
+        }
         $this->icon = '';
         $this->tax_class = MODULE_SHIPPING_ZONETABLE_TAX_CLASS;
         $this->tax_basis = MODULE_SHIPPING_ZONETABLE_TAX_BASIS;
-        $this->enabled = zen_get_shipping_enabled($this->code) && MODULE_SHIPPING_ZONETABLE_STATUS === 'True';
+        $this->enabled = zen_get_shipping_enabled($this->code)
+            && MODULE_SHIPPING_ZONETABLE_STATUS === 'True';
 
-        if ($this->enabled) {
-            $this->dest_zone = 0;
+        if ($this->enabled && IS_ADMIN_FLAG === false) {
             for ($i = 1; $i <= $this->num_zones; $i++) {
-                if ((int)constant('MODULE_SHIPPING_ZONETABLE_ZONE_' . $i) > 0) {
-                    $check = $db->Execute("SELECT zone_id FROM " . TABLE_ZONES_TO_GEO_ZONES . " WHERE geo_zone_id = '" . constant('MODULE_SHIPPING_ZONETABLE_ZONE_' . $i) . "' AND zone_country_id = '" . $order->delivery['country']['id'] . "' ORDER BY zone_id");
+                $zone_key = 'MODULE_SHIPPING_ZONETABLE_ZONE_' . $i;
+                if (defined($zone_key) && (int)constant($zone_key) > 0) {
+                    $geo_zone_id = (int)constant($zone_key);
+                    $country_id = (int)($order->delivery['country']['id'] ?? 0);
+                    $delivery_zone_id = (int)($order->delivery['zone_id'] ?? 0);
+                    $check = $db->Execute(
+                        "SELECT zone_id FROM " . TABLE_ZONES_TO_GEO_ZONES
+                        . " WHERE geo_zone_id = " . $geo_zone_id
+                        . " AND zone_country_id = " . $country_id
+                        . " ORDER BY zone_id"
+                    );
                     while (!$check->EOF) {
-                        if ($check->fields['zone_id'] < 1 || $check->fields['zone_id'] == $order->delivery['zone_id']) {
+                        if ((int)$check->fields['zone_id'] < 1 || (int)$check->fields['zone_id'] === $delivery_zone_id) {
                             $this->dest_zone = $i;
-                            break;
+                            break 2;
                         }
                         $check->MoveNext();
                     }
@@ -50,9 +70,14 @@ class zonetable extends base {
                 $this->enabled = false;
             }
         }
+
+        if ($this->enabled && IS_ADMIN_FLAG === false) {
+            $this->notify('NOTIFY_SHIPPING_ZONETABLE_UPDATE_STATUS', [], $this->enabled);
+        }
     }
 
-    public function quote(string $method = ''): array {
+    public function quote(string $method = ''): array
+    {
         global $order, $shipping_weight, $shipping_num_boxes, $total_count, $db;
 
         switch (MODULE_SHIPPING_ZONETABLE_MODE) {
@@ -69,12 +94,23 @@ class zonetable extends base {
                 $order_total = 0;
         }
 
-        $table_cost = preg_split("/[:,]/", constant('MODULE_SHIPPING_ZONETABLE_COST_' . $this->dest_zone));
-        $shipping = 0;
+        $rate_key = 'MODULE_SHIPPING_ZONETABLE_COST_' . $this->dest_zone;
+        $table_cost = defined($rate_key) ? preg_split('/[:,]/', (string)constant($rate_key)) : [];
+        $shipping = 0.0;
+        $order_total_amount = $_SESSION['cart']->show_total() - $_SESSION['cart']->free_shipping_prices();
 
-        for ($i = 0, $n = count($table_cost); $i < $n; $i += 2) {
-            if (round($order_total, 9) <= $table_cost[$i]) {
-                $shipping = $table_cost[$i + 1];
+        for ($i = 0, $n = count($table_cost); $i + 1 < $n; $i += 2) {
+            $maximum = trim($table_cost[$i]);
+            $rate = trim($table_cost[$i + 1]);
+            if (!is_numeric($maximum)) {
+                continue;
+            }
+            if (round($order_total, 9) <= (float)$maximum) {
+                if (str_ends_with($rate, '%') && is_numeric(rtrim($rate, "% \t\n\r\0\x0B"))) {
+                    $shipping = ((float)rtrim($rate, "% \t\n\r\0\x0B") / 100) * $order_total_amount;
+                } elseif (is_numeric($rate)) {
+                    $shipping = (float)$rate;
+                }
                 break;
             }
         }
@@ -92,7 +128,11 @@ class zonetable extends base {
             $show_box_weight = '';
         }
 
-        $get_gzn = $db->Execute("SELECT geo_zone_name FROM " . TABLE_GEO_ZONES . " WHERE geo_zone_id = '" . constant('MODULE_SHIPPING_ZONETABLE_ZONE_' . $this->dest_zone) . "' LIMIT 1");
+        $geo_zone_id = (int)constant('MODULE_SHIPPING_ZONETABLE_ZONE_' . $this->dest_zone);
+        $get_gzn = $db->Execute(
+            "SELECT geo_zone_name FROM " . TABLE_GEO_ZONES
+            . " WHERE geo_zone_id = " . $geo_zone_id . " LIMIT 1"
+        );
         $gzn = $get_gzn->fields['geo_zone_name'] ?? '';
 
         $this->quotes = [
@@ -102,7 +142,7 @@ class zonetable extends base {
                 [
                     'id' => $this->code,
                     'title' => MODULE_SHIPPING_ZONETABLE_TEXT_WAY . $gzn,
-                    'cost' => $shipping + constant('MODULE_SHIPPING_ZONETABLE_HANDLING_' . $this->dest_zone)
+                    'cost' => $shipping + (float)constant('MODULE_SHIPPING_ZONETABLE_HANDLING_' . $this->dest_zone),
                 ]
             ]
         ];
@@ -111,14 +151,15 @@ class zonetable extends base {
             $this->quotes['tax'] = zen_get_tax_rate($this->tax_class, $order->delivery['country']['id'], $order->delivery['zone_id']);
         }
 
-        if (zen_not_null($this->icon)) {
+        if (!empty($this->icon)) {
             $this->quotes['icon'] = zen_image($this->icon, $this->title);
         }
 
         return $this->quotes;
     }
 
-    public function check(): int {
+    public function check(): int
+    {
         global $db;
         if (!isset($this->_check)) {
             $check_query = $db->Execute("SELECT configuration_value FROM " . TABLE_CONFIGURATION . " WHERE configuration_key = 'MODULE_SHIPPING_ZONETABLE_STATUS'");
@@ -127,7 +168,8 @@ class zonetable extends base {
         return $this->_check;
     }
 
-    public function install(): void {
+    public function install(): void
+    {
         global $db;
         $db->Execute("INSERT INTO " . TABLE_CONFIGURATION . " (configuration_title, configuration_key, configuration_value, configuration_description, configuration_group_id, sort_order, set_function, date_added) VALUES ('Enable Table Method', 'MODULE_SHIPPING_ZONETABLE_STATUS', 'True', 'Do you want to offer zonetable rate shipping?', '6', '0', 'zen_cfg_select_option(array(\'True\', \'False\'), ', NOW())");
         $db->Execute("INSERT INTO " . TABLE_CONFIGURATION . " (configuration_title, configuration_key, configuration_value, configuration_description, configuration_group_id, sort_order, set_function, date_added) VALUES ('Table Method', 'MODULE_SHIPPING_ZONETABLE_MODE', 'weight', 'The shipping cost is based on the order total or the total weight of the items ordered or the total number of items ordered.', '6', '0', 'zen_cfg_select_option(array(\'weight\', \'price\', \'item\'), ', NOW())");
@@ -137,24 +179,36 @@ class zonetable extends base {
 
         for ($i = 1; $i <= $this->num_zones; $i++) {
             $db->Execute("INSERT INTO " . TABLE_CONFIGURATION . " (configuration_title, configuration_key, configuration_value, configuration_description, configuration_group_id, sort_order, use_function, set_function, date_added) VALUES ('Shipping Zone " . $i . "', 'MODULE_SHIPPING_ZONETABLE_ZONE_" . $i . "', '0', 'If a zone is selected, only enable this shipping method for that zone.', '6', '0', 'zen_get_zone_class_title', 'zen_cfg_pull_down_zone_classes(', NOW())");
-            $db->Execute("INSERT INTO " . TABLE_CONFIGURATION . " (configuration_title, configuration_key, configuration_value, configuration_description, configuration_group_id, sort_order, date_added) VALUES ('Table of Rates " . $i . "', 'MODULE_SHIPPING_ZONETABLE_COST_" . $i . "', '3:8.50,7:10.50,99:20.00', 'Shipping rates to Zone " . $i . " destinations based on a group of maximum order totals. Example: 3:8.50,7:10.50,... This means that orders up to 3 cost 8.50 for Zone " . $i . " destinations.', '6', '0', NOW())");
+            $db->Execute("INSERT INTO " . TABLE_CONFIGURATION . " (configuration_title, configuration_key, configuration_value, configuration_description, configuration_group_id, sort_order, set_function, date_added) VALUES ('Table of Rates " . $i . "', 'MODULE_SHIPPING_ZONETABLE_COST_" . $i . "', '3:8.50,7:10.50,99:20.00', 'Rates for Zone " . $i . " as maximum:cost pairs. Example: 3:8.50,7:10.50,99:20.00. Percentage rates are supported in price mode, for example 100:7%.', '6', '0', 'zen_cfg_textarea(', NOW())");
             $db->Execute("INSERT INTO " . TABLE_CONFIGURATION . " (configuration_title, configuration_key, configuration_value, configuration_description, configuration_group_id, sort_order, date_added) VALUES ('Handling Fee for Zone " . $i . "', 'MODULE_SHIPPING_ZONETABLE_HANDLING_" . $i . "', '0', 'Handling Fee for this shipping zone', '6', '0', NOW())");
         }
     }
 
-    public function remove(): void {
+    public function remove(): void
+    {
         global $db;
         $db->Execute("DELETE FROM " . TABLE_CONFIGURATION . " WHERE configuration_key in ('" . implode("', '", $this->keys()) . "')");
     }
 
-    public function keys(): array {
+    public function keys(): array
+    {
         $keys = ['MODULE_SHIPPING_ZONETABLE_STATUS', 'MODULE_SHIPPING_ZONETABLE_MODE', 'MODULE_SHIPPING_ZONETABLE_TAX_CLASS', 'MODULE_SHIPPING_ZONETABLE_TAX_BASIS', 'MODULE_SHIPPING_ZONETABLE_SORT_ORDER'];
         for ($i = 1; $i <= $this->num_zones; $i++) {
-            $keys[] = 'MODULE_SHIPPING_ZONETABLE_ZONE_' . $i;
-            $keys[] = 'MODULE_SHIPPING_ZONETABLE_COST_' . $i;
-            $keys[] = 'MODULE_SHIPPING_ZONETABLE_HANDLING_' . $i;
+            $zone_key = 'MODULE_SHIPPING_ZONETABLE_ZONE_' . $i;
+            $cost_key = 'MODULE_SHIPPING_ZONETABLE_COST_' . $i;
+            $handling_key = 'MODULE_SHIPPING_ZONETABLE_HANDLING_' . $i;
+            if (!$this->check() || (defined($zone_key) && defined($cost_key) && defined($handling_key))) {
+                $keys[] = $zone_key;
+                $keys[] = $cost_key;
+                $keys[] = $handling_key;
+            }
         }
         return $keys;
+    }
+
+    public function help(): array
+    {
+        return ['link' => 'https://www.zen-cart.com/plugins/zones-table-rate-for-multiple-zones-vb478'];
     }
 }
 
