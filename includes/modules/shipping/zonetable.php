@@ -5,7 +5,7 @@
  * @copyright Portions Copyright 2003 osCommerce
  * @copyright Modifications Copyright 2024-2026 PRO-Webs.net
  * @license https://www.gnu.org/licenses/old-licenses/gpl-2.0.html GNU GPL v2.0
- * @version 2.1.0
+ * @version 2.1.1
  */
 
 class zonetable extends base

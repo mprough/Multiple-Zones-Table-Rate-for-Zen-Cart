@@ -13,6 +13,10 @@ Create the geographic zones you need under **Locations/Taxes > Zone Definitions*
 5. Configure the calculation method, tax settings, shipping zones, rate tables, handling fees, and sort order.
 6. Test addresses in every configured zone and at every rate boundary before enabling the module for shoppers.
 
+## Upgrade from 2.1.0 to 2.1.1
+
+Back up the module files and record the current settings, then upload the new `includes` directory over the existing files. Do not remove or reinstall the shipping module for this update. Existing zones, rate tables, handling fees, and tax settings remain in place. Test a shipping quote after uploading.
+
 ## Upgrade from an earlier version
 
 1. Back up the store files and database.

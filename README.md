@@ -1,6 +1,6 @@
 # Multiple Zones Table Rate for Zen Cart
 
-Version 2.1.0
+Version 2.1.1
 
 Multiple Zones Table Rate adds one shipping module with separate table-rate settings for up to 10 Zen Cart zone definitions. Each zone can use its own rate table and handling fee, while the calculation can be based on order weight, price, or item count.
 
@@ -33,6 +33,8 @@ See [Configuration guide](docs/CONFIGURATION.md).
 - [Zen Cart plugin page](https://www.zen-cart.com/plugins/zones-table-rate-for-multiple-zones-vb478)
 - [Zen Cart support forum](https://www.zen-cart.com/showthread.php?73166)
 - [PRO-Webs support](https://prowebsinc.zohodesk.com/portal/en/newticket)
+
+Maintained by Melanie Prough, PRO-Webs, Inc. Free distribution is provided without warranty. Installation, configuration, and customization are not included.
 
 ## License
 

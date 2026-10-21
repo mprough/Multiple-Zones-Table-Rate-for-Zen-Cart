@@ -1,5 +1,13 @@
 # Version history
 
+## 2.1.1 - 2026-10-21
+
+- Advance the patch version for a new Zen Cart plugin repository upload.
+- Clarify traditional installation through Modules > Shipping rather than Plugin Manager.
+- Qualify PHP compatibility by the limits of the installed Zen Cart version.
+- Document upgrading from 2.1.0 without removing existing shipping settings.
+- Shipping calculations, configured zones, rates, and handling fees are unchanged.
+
 ## 2.1.0 - 2026-09-02
 
 - Corrected the Zen Cart array-based language file so its definitions load properly.
