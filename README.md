@@ -7,9 +7,9 @@ Multiple Zones Table Rate adds one shipping module with separate table-rate sett
 ## Compatibility
 
 - Zen Cart 2.0.1 through 2.2.2
-- PHP 8.0 through 8.5
+- PHP 8.0 through 8.5 within the PHP limits of the installed Zen Cart version
 
-The module is encapsulated and does not modify Zen Cart core files.
+This is a traditional shipping module installed through Modules > Shipping. Upload the two files under includes as described in the installation guide. It does not use Plugin Manager and does not modify Zen Cart core files.
 
 ## Features
 
